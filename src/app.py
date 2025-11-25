@@ -8,6 +8,8 @@ from torchvision import models, transforms
 from PIL import Image
 import numpy as np
 
+from db import log_interaction, get_last_interactions
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 CLASS_EN = ["EOSINOPHIL", "LYMPHOCYTE", "MONOCYTE", "NEUTROPHIL"]
@@ -208,3 +210,31 @@ if uploaded_file is not None:
         f"Classe prevista: **{label}**\n\n"
         f"Confiança: **{prob_best * 100:.2f}%**"
     )
+
+    prob_eosinophil = probs.get("Eosinófilo", 0.0)
+    prob_lymphocyte = probs.get("Linfócito", 0.0)
+    prob_monocyte   = probs.get("Monócito", 0.0)
+    prob_neutrophil = probs.get("Neutrófilo", 0.0)
+    
+    filename = getattr(uploaded_file, "name", None)
+    
+    log_interaction(
+        model_name="ResNet-50",
+        predicted_class=label,
+        confidence=prob_best,
+        prob_eosinophil=prob_eosinophil,
+        prob_lymphocyte=prob_lymphocyte,
+        prob_monocyte=prob_monocyte,
+        prob_neutrophil=prob_neutrophil,
+        filename=filename,
+    )
+
+st.markdown("---")
+st.subheader("Histórico recente de interações")
+
+df_logs = get_last_interactions(limit=20)
+
+if df_logs.empty:
+    st.info("Nenhuma interação registrada ainda. Envie uma imagem para começar o histórico.")
+else:
+    st.dataframe(df_logs, use_container_width=True)

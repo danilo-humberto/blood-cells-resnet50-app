@@ -2,7 +2,70 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# ---------- Configuração básica da página ----------
+import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
+import numpy as np
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+CLASS_EN = ["EOSINOPHIL", "LYMPHOCYTE", "MONOCYTE", "NEUTROPHIL"]
+
+CLASS_PT = {
+    "EOSINOPHIL": "Eosinófilo",
+    "LYMPHOCYTE": "Linfócito",
+    "MONOCYTE": "Monócito",
+    "NEUTROPHIL": "Neutrófilo",
+}
+
+image_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    ),
+])
+
+
+@st.cache_resource
+def load_model_resnet50():
+    model = models.resnet50(weights=None)
+
+    num_ftrs = model.fc.in_features
+    model.fc = nn.Linear(num_ftrs, len(CLASS_EN))
+
+    state_dict = torch.load("models/resnet50_best.pth", map_location=device)
+    model.load_state_dict(state_dict)
+
+    model.to(device)
+    model.eval()
+
+    return model
+
+def predict_image(model, file):
+    image = Image.open(file).convert("RGB")
+
+    tensor = image_transform(image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        outputs = model(tensor)
+        probs = torch.softmax(outputs, dim=1)[0].cpu().numpy()
+
+    best_idx = int(np.argmax(probs))
+    label_en = CLASS_EN[best_idx]
+    label_pt = CLASS_PT[label_en]
+    prob_best = float(probs[best_idx])
+
+    probs_pt = {
+        CLASS_PT[CLASS_EN[i]]: float(probs[i])
+        for i in range(len(CLASS_EN))
+    }
+
+    return image, label_pt, prob_best, probs_pt
+
 st.set_page_config(
     page_title="Classificação de Células Sanguíneas",
     layout="wide"
@@ -23,41 +86,39 @@ st.markdown(
 
 st.subheader("Resultados dos Experimentos")
 
-# Valores de exemplo — depois você pode ajustar com os números exatos do notebook
 data = {
-    "Modelo": ["DenseNet-161", "ResNet-50", "VGG-11"],
-    "Epochs": [12, 15, 15],
+    "Modelo": ["DenseNet-161", "ResNet-50", "VGG-11", "DDRNet"],
+    "Epochs": [12, 15, 15, 30],
 
-    # Val Loss / Val Acc / Val F1
-    "Best Val Loss":  [0.0031, 0.0029, 0.0028],
-    "Final Val Loss": [0.0045, 0.0149, 0.0028],
+    "Best Val Loss":  [0.0031, 0.0029, 0.0028, 1.3880],
+    "Final Val Loss": [0.0045, 0.0149, 0.0028, 1.3880],
 
-    "Best Val Acc":   [0.9995, 0.9995, 1.0000],
-    "Final Val Acc":  [0.9985, 0.9965, 1.0000],
+    "Best Val Acc":   [0.9995, 0.9995, 1.0000, None],
+    "Final Val Acc":  [0.9985, 0.9965, 1.0000, None],
 
-    "Best Val F1":    [0.9995, 0.9995, 1.0000],
-    "Final Val F1":   [0.9985, 0.9965, 1.0000],
+    "Best Val F1":    [0.9995, 0.9995, 1.0000, None],
+    "Final Val F1":   [0.9985, 0.9965, 1.0000, None],
 
-    # Métricas de teste
-    "Test Acc":       [0.8762, 0.8854, 0.8762],
-    "Test Precision": [0.9037, 0.9064, 0.8999],
-    "Test Recall":    [0.8761, 0.8854, 0.8761],
-    "Test F1":        [0.8795, 0.8880, 0.8793], 
+    "Test Acc":       [0.8762, 0.8854, 0.8762, 0.2460],
+    "Test Precision": [0.9037, 0.9064, 0.8999, None],
+    "Test Recall":    [0.8761, 0.8854, 0.8761, None],
+    "Test F1":        [0.8795, 0.8880, 0.8793, 0.0987], 
 }
 
 df_results = pd.DataFrame(data)
-st.dataframe(df_results, use_container_width=True)
+st.dataframe(df_results, width='stretch')
 
-# ---------- Seção 2: Gráficos ----------
+df_top = df_results[df_results["Modelo"] != "DDRNet"]
+
 st.subheader("Comparação Visual dos Modelos")
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown("**Acurácia e F1-Score no Conjunto de Teste**")
     fig, ax = plt.subplots()
-    ax.bar(df_results["Modelo"], df_results["Test Acc"], label="Acurácia")
-    ax.bar(df_results["Modelo"], df_results["Test F1"], alpha=0.7, label="F1-Score")
+    ax.bar(df_top["Modelo"],df_top["Test Acc"], label="Acurácia")
+    ax.bar(df_top["Modelo"], df_top["Test F1"], alpha=0.7, label="F1-Score")
     ax.set_ylim(0.8, 1.0)
     ax.set_ylabel("Valor")
     ax.legend()
@@ -73,6 +134,10 @@ with col2:
     ax2.legend()
     st.pyplot(fig2)
 
+with col3:
+    st.markdown("**DDRNet**")
+    st.image("src/assets/ddrnet.png", width='stretch')
+
 st.markdown("---")
 
 st.subheader("Desempenho Detalhado do Modelo Final (ResNet-50)")
@@ -81,13 +146,12 @@ resCol1, resCol2 = st.columns(2)
 
 with resCol1:
     st.markdown("### Gráfico de Loss por Época")
-    st.image("src/assets/loss-resnet50.png", use_column_width=True)
+    st.image("src/assets/loss-resnet50.png", width='stretch')
 
 with resCol2:
     st.markdown("### Matriz de Confusão (ResNet-50)")
-    st.image("src/assets/confusion_matrix_resnet50.png", use_column_width=True)
+    st.image("src/assets/confusion_matrix_resnet50.png", width='stretch')
 
-# ---------- Seção 3: Upload de imagem e predição ----------
 st.subheader("Classificação de uma Imagem de Lâmina de Sangue")
 
 st.markdown(
@@ -136,5 +200,11 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    st.image(uploaded_file, caption="Imagem enviada", use_column_width=True)
-    st.info("A etapa de predição será implementada no próximo passo.")
+    model = load_model_resnet50()
+    
+    image, label, prob_best, probs = predict_image(model, uploaded_file)
+    st.image(uploaded_file, caption="Imagem enviada", width='stretch')
+    st.success(
+        f"Classe prevista: **{label}**\n\n"
+        f"Confiança: **{prob_best * 100:.2f}%**"
+    )

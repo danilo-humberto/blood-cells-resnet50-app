@@ -1,7 +1,12 @@
-streamlit
-torch
-torchvision
-pillow
-pandas
-matplotlib
-scikit-learn
+streamlit==1.40.0
+pandas==2.2.3
+numpy==1.26.4
+pillow==10.4.0
+matplotlib==3.9.2
+scikit-learn==1.5.2
+
+# PyTorch CPU - compatível com Windows e deploy Linux
+torch==2.1.0+cpu
+torchvision==0.16.0+cpu
+torchaudio==2.1.0+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu

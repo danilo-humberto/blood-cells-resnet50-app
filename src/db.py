@@ -10,10 +10,6 @@ DB_PATH = "data/interactions.db"
 
 @st.cache_resource
 def get_connection():
-    """
-    Cria (se não existir) e devolve uma conexão com o SQLite.
-    Também garante a criação da tabela de interações.
-    """
     os.makedirs("data", exist_ok=True)
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
@@ -47,9 +43,6 @@ def log_interaction(
     prob_neutrophil: float,
     filename: str | None = None,
 ):
-    """
-    Insere um registro de interação na tabela.
-    """
     conn = get_connection()
     ts = datetime.now().isoformat(timespec="seconds")
 
@@ -83,9 +76,6 @@ def log_interaction(
 
 
 def get_last_interactions(limit: int = 20) -> pd.DataFrame:
-    """
-    Retorna um DataFrame com as últimas interações registradas.
-    """
     conn = get_connection()
     df = pd.read_sql_query(
         """

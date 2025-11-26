@@ -237,4 +237,4 @@ df_logs = get_last_interactions(limit=20)
 if df_logs.empty:
     st.info("Nenhuma interação registrada ainda. Envie uma imagem para começar o histórico.")
 else:
-    st.dataframe(df_logs, use_container_width=True)
+    st.dataframe(df_logs, width="stretch")
